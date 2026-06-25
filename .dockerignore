@@ -1,0 +1,6 @@
+.git
+*.md
+docker-compose.yaml
+.env*
+data/logs/
+data/reports/

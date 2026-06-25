@@ -1,0 +1,52 @@
+# docker-compose.yaml — Baiak Thunder STAGING (parallel, nao toca o server ao vivo)
+# Portas: 7181/7182 (live usa 7171/7172)
+# DB: thunder (live usa tibia)
+#
+# USO LOCAL (validacao):
+#   docker compose up --build
+#
+# NO COOLIFY: nao usar este compose. Criar Application (Dockerfile) + Database (MariaDB)
+# separados. Ver NOTES.md.
+
+services:
+  db:
+    image: mariadb:10.6
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?}
+      MYSQL_DATABASE: thunder
+      MYSQL_USER: ${OT_DB_USER:?}
+      MYSQL_PASSWORD: ${OT_DB_PASSWORD:?}
+    volumes:
+      - bt_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "7181:7181"  # login + status
+      - "7182:7182"  # game
+    environment:
+      OT_DB_HOST: db
+      OT_DB_PORT: 3306
+      OT_DB_NAME: thunder
+      OT_DB_USER: ${OT_DB_USER:?}
+      OT_DB_PASSWORD: ${OT_DB_PASSWORD:?}
+      OT_SERVER_NAME: ${OT_SERVER_NAME:-Baiak Thunder Staging}
+      OT_SERVER_IP: ${OT_SERVER_IP:-127.0.0.1}
+    # Nao ha volume para /opt/otserver/data — datapack fica na imagem (imutavel).
+    # Para iterar sem rebuild: docker cp + docker exec nao sao pratica recomendada.
+
+volumes:
+  bt_db_data:
