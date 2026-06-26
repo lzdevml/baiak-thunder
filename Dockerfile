@@ -42,11 +42,14 @@ WORKDIR /src/engine
 COPY infra/docker/engine-u32.sh /tmp/engine-u32.sh
 RUN sh /tmp/engine-u32.sh
 
-# Build with CMake
+# Build with CMake.
+# IMPORTANTE: -j2 (nao -j$(nproc)) — compilar com paralelismo total estoura a RAM da VPS
+# de 8GB (server.cpp+luascript.cpp pesados) e o build morre por OOM (exit 255 ~80%).
+# -j2 limita a ~2 compiles simultaneos. Mais lento (~20min) mas estavel.
 RUN mkdir build \
     && cd build \
     && cmake .. \
-    && make -j$(nproc)
+    && make -j2
 
 # Confirm binary
 RUN ls build/tfs && echo "Build OK"
