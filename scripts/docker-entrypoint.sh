@@ -38,6 +38,7 @@ sed -i "s|gameProtocolPort = [0-9]*|gameProtocolPort = 7182|" config.lua
 sed -i "s|statusProtocolPort = [0-9]*|statusProtocolPort = 7181|" config.lua
 
 echo "[entrypoint] config.lua patched"
+echo "[entrypoint] PORTAS REAIS: $(grep -E 'loginProtocolPort|gameProtocolPort|statusProtocolPort|^ip =' config.lua | tr '\n' ' ')"
 
 # ---- Wait for MariaDB ----
 echo "[entrypoint] waiting for DB at ${OT_DB_HOST}:${OT_DB_PORT}..."
@@ -79,5 +80,8 @@ else
 fi
 
 # ---- Start TFS ----
+# (sem exec) pra capturar o exit code se o engine cair (diagnostico crash vs hang).
 echo "[entrypoint] Starting ./tfs ..."
-exec ./tfs
+./tfs
+echo "[entrypoint] !!! tfs SAIU com codigo $? !!! (se cair ao entrar no mundo = crash de player-load)"
+sleep 3
