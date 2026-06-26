@@ -53,23 +53,29 @@ until mysqladmin ping -h"${OT_DB_HOST}" -P"${OT_DB_PORT}" -u"${OT_DB_USER}" -p"$
 done
 echo "[entrypoint] DB is up"
 
-# ---- First-boot schema import ----
-# Check if the 'accounts' table exists. If not, import schema + Thunder data.
-TABLE_CHECK=$(mysql -h"${OT_DB_HOST}" -P"${OT_DB_PORT}" -u"${OT_DB_USER}" -p"${OT_DB_PASSWORD}" \
-    -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${OT_DB_NAME}' AND table_name='accounts';" \
-    --skip-column-names 2>/dev/null || echo "0")
+# ---- DB import (Thunder.sql = dump COMPLETO baiakthunder: schema certo + dados + conta 1/god) ----
+# NAO usar schema.sql (TFS vanilla): ele cria tabelas com estrutura diferente, o Thunder.sql
+# (sem DROP TABLE) entao falha por "table already exists" e os dados/contas nao entram.
+# Gatilho: se accounts tiver 0 linhas (ou nao existir) -> wipe tabelas + importa Thunder.sql limpo.
+MYSQL="mysql -h${OT_DB_HOST} -P${OT_DB_PORT} -u${OT_DB_USER} -p${OT_DB_PASSWORD}"
+ACC_COUNT=$($MYSQL -N -e "SELECT COUNT(*) FROM \`${OT_DB_NAME}\`.accounts;" 2>/dev/null || echo "0")
+[ -z "$ACC_COUNT" ] && ACC_COUNT="0"
+echo "[entrypoint] accounts existentes: ${ACC_COUNT}"
 
-if [ "$TABLE_CHECK" = "0" ] || [ -z "$TABLE_CHECK" ]; then
-    echo "[entrypoint] First boot detected — importing schema.sql + Thunder.sql into ${OT_DB_NAME}..."
-    mysql -h"${OT_DB_HOST}" -P"${OT_DB_PORT}" -u"${OT_DB_USER}" -p"${OT_DB_PASSWORD}" \
-        -e "CREATE DATABASE IF NOT EXISTS \`${OT_DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>&1
-    mysql -h"${OT_DB_HOST}" -P"${OT_DB_PORT}" -u"${OT_DB_USER}" -p"${OT_DB_PASSWORD}" \
-        "${OT_DB_NAME}" < schema.sql 2>&1 && echo "[entrypoint] schema.sql imported"
-    mysql -h"${OT_DB_HOST}" -P"${OT_DB_PORT}" -u"${OT_DB_USER}" -p"${OT_DB_PASSWORD}" \
-        "${OT_DB_NAME}" < Thunder.sql 2>&1 && echo "[entrypoint] Thunder.sql imported"
-    echo "[entrypoint] First-boot import complete"
+if [ "$ACC_COUNT" = "0" ]; then
+    echo "[entrypoint] DB vazia/invalida — limpando tabelas e importando Thunder.sql..."
+    $MYSQL -e "CREATE DATABASE IF NOT EXISTS \`${OT_DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>&1
+    # dropa todas as tabelas existentes (do schema.sql vanilla) sem DROP DATABASE
+    DROPS=$($MYSQL -N -e "SELECT CONCAT('DROP TABLE IF EXISTS \`', table_name, '\`;') FROM information_schema.tables WHERE table_schema='${OT_DB_NAME}';" 2>/dev/null)
+    if [ -n "$DROPS" ]; then
+        { echo "SET FOREIGN_KEY_CHECKS=0;"; echo "$DROPS"; echo "SET FOREIGN_KEY_CHECKS=1;"; } | $MYSQL "${OT_DB_NAME}" 2>&1
+        echo "[entrypoint] tabelas antigas removidas"
+    fi
+    $MYSQL "${OT_DB_NAME}" < Thunder.sql 2>&1 | tail -5 && echo "[entrypoint] Thunder.sql importado"
+    NEW_ACC=$($MYSQL -N -e "SELECT COUNT(*) FROM \`${OT_DB_NAME}\`.accounts;" 2>/dev/null || echo "0")
+    echo "[entrypoint] contas apos import: ${NEW_ACC}"
 else
-    echo "[entrypoint] DB already initialized (accounts table exists) — skipping import"
+    echo "[entrypoint] DB ja inicializada (${ACC_COUNT} contas) — pula import"
 fi
 
 # ---- Start TFS ----
