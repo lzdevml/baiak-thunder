@@ -79,8 +79,8 @@ WORKDIR /opt/otserver
 # Copy binary from builder
 COPY --from=builder /src/engine/build/tfs ./tfs
 
-# RSA key (ships in engine source root)
-COPY --from=builder /src/engine/key.pem ./key.pem
+# RSA key (esta na raiz do contexto do build, nao no source do engine)
+COPY key.pem ./key.pem
 
 # Baiakthunder datapack
 COPY data/ ./data/
